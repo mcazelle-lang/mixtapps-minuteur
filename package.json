@@ -1,0 +1,15 @@
+{
+  "name": "mixtapps-minuteur",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Travaille 25 minutes, souffle 5 : un minuteur Pomodoro épuré avec pause longue tous les 4 cycles, bip de fin et temps restant dans l’onglet.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^8.3.0"
+  }
+}

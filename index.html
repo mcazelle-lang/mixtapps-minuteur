@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Minuteur Pomodoro</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍅</text></svg>">
+<style>
+  :root {
+    --accent: #0f766e;
+    --accent-fonce: #0b5e58;
+    --accent-clair: #e7f5f3;
+    --pause: #2b6cb0;
+    --texte: #1f2933;
+    --texte-doux: #56626c;
+    --bordure: #e3e8ec;
+    --fond-doux: #f7f9fa;
+    --couleur-mode: var(--accent);
+  }
+  body[data-mode="pauseCourte"], body[data-mode="pauseLongue"] { --couleur-mode: var(--pause); }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--texte); background: #fff; line-height: 1.5; }
+  button, input { font: inherit; color: inherit; }
+  :focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  .page { max-width: 480px; margin: 0 auto; padding: 2rem 1.25rem 3rem; display: flex; flex-direction: column; align-items: center; gap: 1.5rem; }
+  .entete { text-align: center; }
+  .entete h1 { margin: 0; font-size: 1.4rem; font-weight: 600; letter-spacing: -.01em; }
+  .entete h1 span { color: var(--accent); }
+  .entete p { margin: .25rem 0 0; color: var(--texte-doux); font-size: .95rem; }
+
+  /* Sélecteur de mode */
+  .modes { display: flex; gap: .25rem; padding: .25rem; background: var(--fond-doux); border: 1px solid var(--bordure); border-radius: 999px; flex-wrap: wrap; justify-content: center; }
+  .mode { border: 0; background: transparent; padding: .45rem .9rem; border-radius: 999px; cursor: pointer; font-size: .9rem; color: var(--texte-doux); }
+  .mode[aria-pressed="true"] { background: #fff; color: var(--texte); font-weight: 600; box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
+
+  /* Cadran circulaire */
+  .cadran { position: relative; width: min(78vw, 300px); aspect-ratio: 1; }
+  .anneau { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .anneau circle { fill: none; stroke-width: 6; }
+  .anneau-fond { stroke: var(--bordure); }
+  .anneau-progres { stroke: var(--couleur-mode); stroke-linecap: round; transition: stroke-dashoffset .3s linear, stroke .3s; }
+  .cadran-texte { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .temps { margin: 0; font-size: clamp(3rem, 16vw, 4.25rem); font-weight: 300; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+  .libelle { margin: 0; color: var(--couleur-mode); font-weight: 600; }
+
+  /* Commandes */
+  .commandes { display: flex; gap: .5rem; flex-wrap: wrap; justify-content: center; }
+  .btn { border: 1px solid var(--bordure); background: #fff; border-radius: 10px; padding: .6rem 1rem; cursor: pointer; }
+  .btn:hover { background: var(--fond-doux); }
+  .btn-principal { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; min-width: 8.5rem; }
+  .btn-principal:hover { background: var(--accent-fonce); }
+
+  /* Statistiques du jour */
+  .stats { text-align: center; color: var(--texte-doux); }
+  .stats p { margin: 0 0 .5rem; }
+  .stats strong { color: var(--texte); font-size: 1.1rem; }
+  .points { display: flex; gap: .5rem; justify-content: center; }
+  .point { width: .7rem; height: .7rem; border-radius: 50%; border: 2px solid var(--accent); }
+  .point.plein { background: var(--accent); }
+
+  /* Réglages */
+  .reglages { width: 100%; border: 1px solid var(--bordure); border-radius: 12px; padding: .25rem 1rem; }
+  .reglages summary { cursor: pointer; padding: .6rem 0; font-weight: 600; }
+  .grille-reglages { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: .75rem; margin: .5rem 0 1rem; }
+  @media (max-width: 400px) { .grille-reglages { grid-template-columns: 1fr; } }
+  .champ label { display: block; font-size: .8rem; color: var(--texte-doux); margin-bottom: .2rem; }
+  .champ input { width: 100%; padding: .45rem .6rem; border: 1px solid var(--bordure); border-radius: 8px; }
+  .case { display: flex; align-items: center; gap: .5rem; margin: .4rem 0; }
+  .case input { width: 1.1rem; height: 1.1rem; accent-color: var(--accent); }
+  .aide { font-size: .8rem; color: var(--texte-doux); margin: .25rem 0 .75rem; }
+  .actions-reglages { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+  .pied { font-size: .8rem; color: var(--texte-doux); text-align: center; }
+</style>
+</head>
+<body data-mode="travail">
+<main class="page">
+  <header class="entete">
+    <h1>Minuteur <span>Pomodoro</span></h1>
+    <p>Concentre-toi 25 minutes, souffle 5 minutes. Simple.</p>
+  </header>
+
+  <div class="modes" role="group" aria-label="Choisir le mode">
+    <button type="button" class="mode" id="mode-travail" data-mode="travail" aria-pressed="true">Travail</button>
+    <button type="button" class="mode" id="mode-pause-courte" data-mode="pauseCourte" aria-pressed="false">Pause courte</button>
+    <button type="button" class="mode" id="mode-pause-longue" data-mode="pauseLongue" aria-pressed="false">Pause longue</button>
+  </div>
+
+  <section class="cadran" aria-label="Temps restant">
+    <svg class="anneau" viewBox="0 0 200 200" aria-hidden="true">
+      <circle class="anneau-fond" cx="100" cy="100" r="90"></circle>
+      <circle class="anneau-progres" id="anneau-progres" cx="100" cy="100" r="90"></circle>
+    </svg>
+    <div class="cadran-texte">
+      <p id="temps-restant" class="temps" role="timer">25:00</p>
+      <p id="libelle-mode" class="libelle">Au travail !</p>
+    </div>
+  </section>
+
+  <div class="commandes">
+    <button type="button" id="btn-demarrer" class="btn btn-principal">Démarrer</button>
+    <button type="button" id="btn-reinitialiser" class="btn">Réinitialiser</button>
+    <button type="button" id="btn-passer" class="btn">Passer</button>
+  </div>
+
+  <section class="stats" aria-label="Statistiques du jour">
+    <p>Cycles terminés aujourd’hui : <strong id="compteur-cycles">0</strong></p>
+    <div id="points-serie" class="points" role="img" aria-label="0 cycle sur 4 avant la pause longue">
+      <span class="point"></span><span class="point"></span><span class="point"></span><span class="point"></span>
+    </div>
+  </section>
+
+  <p id="annonce" class="sr-only" aria-live="assertive"></p>
+
+  <details class="reglages" id="reglages">
+    <summary>Réglages</summary>
+    <div class="grille-reglages">
+      <div class="champ"><label for="reglage-travail">Travail (min)</label><input type="number" id="reglage-travail" min="1" max="120" inputmode="numeric"></div>
+      <div class="champ"><label for="reglage-pause-courte">Pause courte (min)</label><input type="number" id="reglage-pause-courte" min="1" max="60" inputmode="numeric"></div>
+      <div class="champ"><label for="reglage-pause-longue">Pause longue (min)</label><input type="number" id="reglage-pause-longue" min="1" max="90" inputmode="numeric"></div>
+    </div>
+    <p class="aide">Une pause longue arrive tous les 4 cycles de travail. Si le minuteur est lancé, les nouvelles durées s’appliquent au prochain cycle.</p>
+    <label class="case"><input type="checkbox" id="option-auto"> Enchaîner automatiquement le cycle suivant</label>
+    <label class="case"><input type="checkbox" id="option-son"> Jouer un bip à la fin</label>
+    <div class="actions-reglages">
+      <button type="button" id="btn-tester-son" class="btn">Tester le bip</button>
+      <button type="button" id="btn-raz-compteur" class="btn">Remettre le compteur à zéro</button>
+    </div>
+  </details>
+
+  <p class="pied">Minuteur · par Mr Basic</p>
+</main>
+
+<script>
+(function () {
+  'use strict';
+  const CLE = 'minuteur:v1';
+  const CIRCONFERENCE = 2 * Math.PI * 90;
+  const MODES = {
+    travail: { court: 'Travail', libelle: 'Au travail !' },
+    pauseCourte: { court: 'Pause', libelle: 'Petite pause ☕' },
+    pauseLongue: { court: 'Pause longue', libelle: 'Grande pause, bravo 🌿' }
+  };
+  const LIMITES = { travail: [1, 120], pauseCourte: [1, 60], pauseLongue: [1, 90] };
+  const $ = (sel) => document.querySelector(sel);
+  const el = {
+    temps: $('#temps-restant'), libelle: $('#libelle-mode'), anneau: $('#anneau-progres'),
+    demarrer: $('#btn-demarrer'), compteur: $('#compteur-cycles'), points: $('#points-serie'), annonce: $('#annonce'),
+    travail: $('#reglage-travail'), pauseCourte: $('#reglage-pause-courte'), pauseLongue: $('#reglage-pause-longue'),
+    auto: $('#option-auto'), son: $('#option-son')
+  };
+
+  function aujourdhui() {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  function borner(v, [min, max], defaut) {
+    const n = Math.round(Number(v));
+    return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : defaut;
+  }
+
+  // --- État et stockage local ---
+  let prefs = { travail: 25, pauseCourte: 5, pauseLongue: 15, auto: false, son: true };
+  let stats = { jour: aujourdhui(), cycles: 0, serie: 0 };
+  try {
+    const data = JSON.parse(localStorage.getItem(CLE));
+    if (data && data.prefs) {
+      prefs.travail = borner(data.prefs.travail, LIMITES.travail, 25);
+      prefs.pauseCourte = borner(data.prefs.pauseCourte, LIMITES.pauseCourte, 5);
+      prefs.pauseLongue = borner(data.prefs.pauseLongue, LIMITES.pauseLongue, 15);
+      prefs.auto = !!data.prefs.auto;
+      prefs.son = data.prefs.son !== false;
+    }
+    if (data && data.stats && data.stats.jour === aujourdhui()) {
+      stats.cycles = Math.max(0, Number(data.stats.cycles) || 0);
+      stats.serie = Math.min(4, Math.max(0, Number(data.stats.serie) || 0));
+    }
+  } catch (e) { /* stockage indisponible : on garde les valeurs par défaut */ }
+
+  function sauvegarder() {
+    try { localStorage.setItem(CLE, JSON.stringify({ prefs, stats })); } catch (e) { /* tant pis */ }
+  }
+  function verifierJour() {
+    if (stats.jour !== aujourdhui()) { stats = { jour: aujourdhui(), cycles: 0, serie: 0 }; }
+  }
+
+  let mode = 'travail';
+  let total = prefs.travail * 60000;
+  let restant = total;
+  let finPrevue = 0;
+  let intervalle = null;
+
+  function dureeMode(m) { return prefs[m] * 60000; }
+  function mmss(ms) {
+    const s = Math.ceil(ms / 1000);
+    return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+  }
+
+  // --- Affichage ---
+  function afficher() {
+    const texte = mmss(restant);
+    el.temps.textContent = texte;
+    el.anneau.style.strokeDashoffset = String(CIRCONFERENCE * (1 - restant / total));
+    const enCours = intervalle !== null;
+    const prefixe = enCours ? '' : (restant < total ? '⏸ ' : '');
+    document.title = prefixe + texte + ' · ' + MODES[mode].court + ' — Minuteur';
+  }
+  function afficherMode() {
+    document.body.dataset.mode = mode;
+    el.libelle.textContent = MODES[mode].libelle;
+    document.querySelectorAll('.mode').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
+  }
+  function afficherStats() {
+    el.compteur.textContent = String(stats.cycles);
+    const remplis = Math.min(4, stats.serie);
+    el.points.querySelectorAll('.point').forEach((p, i) => p.classList.toggle('plein', i < remplis));
+    el.points.setAttribute('aria-label', remplis + ' cycle' + (remplis > 1 ? 's' : '') + ' sur 4 avant la pause longue');
+  }
+  function majBouton() {
+    el.demarrer.textContent = intervalle ? 'Pause' : (restant < total ? 'Reprendre' : 'Démarrer');
+  }
+
+  // --- Son de fin (Web Audio API, aucun fichier externe) ---
+  let audio = null;
+  function initAudio() {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!audio && AC) { try { audio = new AC(); } catch (e) { audio = null; } }
+    if (audio && audio.state === 'suspended') audio.resume().catch(() => {});
+  }
+  function bip(forcer) {
+    if ((!prefs.son && !forcer) || !audio) return;
+    const t0 = audio.currentTime + 0.05;
+    [0, 0.28, 0.56].forEach((decalage, i) => {
+      const osc = audio.createOscillator();
+      const gain = audio.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = i === 2 ? 1046.5 : 880;
+      gain.gain.setValueAtTime(0.0001, t0 + decalage);
+      gain.gain.exponentialRampToValueAtTime(0.25, t0 + decalage + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + decalage + 0.22);
+      osc.connect(gain).connect(audio.destination);
+      osc.start(t0 + decalage);
+      osc.stop(t0 + decalage + 0.25);
+    });
+  }
+
+  // --- Logique du minuteur (basée sur l'heure réelle, robuste aux onglets en arrière-plan) ---
+  function tick() {
+    restant = Math.max(0, finPrevue - Date.now());
+    afficher();
+    if (restant <= 0) terminer();
+  }
+  function demarrer() {
+    if (intervalle) return;
+    initAudio();
+    if (restant <= 0) restant = total;
+    finPrevue = Date.now() + restant;
+    intervalle = setInterval(tick, 250);
+    majBouton();
+    afficher();
+  }
+  function pause() {
+    if (!intervalle) return;
+    clearInterval(intervalle);
+    intervalle = null;
+    restant = Math.max(0, finPrevue - Date.now());
+    majBouton();
+    afficher();
+  }
+  function changerMode(nouveau) {
+    pause();
+    // Une nouvelle série commence après la pause longue
+    if (nouveau === 'travail' && stats.serie >= 4) { stats.serie = 0; sauvegarder(); }
+    mode = nouveau;
+    total = restant = dureeMode(mode);
+    afficherMode();
+    afficherStats();
+    majBouton();
+    afficher();
+  }
+  function modeSuivant(compterCycle) {
+    verifierJour();
+    if (mode === 'travail') {
+      if (compterCycle) { stats.cycles += 1; stats.serie += 1; }
+      return stats.serie >= 4 ? 'pauseLongue' : 'pauseCourte';
+    }
+    return 'travail';
+  }
+  function terminer() {
+    clearInterval(intervalle);
+    intervalle = null;
+    bip(false);
+    const fini = mode;
+    const suivant = modeSuivant(true);
+    sauvegarder();
+    changerMode(suivant);
+    el.annonce.textContent = (fini === 'travail' ? 'Cycle terminé ! ' : 'Pause terminée. ') + MODES[suivant].libelle;
+    if (prefs.auto) demarrer();
+  }
+
+  // --- Réglages ---
+  function remplirReglages() {
+    el.travail.value = prefs.travail;
+    el.pauseCourte.value = prefs.pauseCourte;
+    el.pauseLongue.value = prefs.pauseLongue;
+    el.auto.checked = prefs.auto;
+    el.son.checked = prefs.son;
+  }
+  ['travail', 'pauseCourte', 'pauseLongue'].forEach((cle) => {
+    el[cle].addEventListener('change', () => {
+      prefs[cle] = borner(el[cle].value, LIMITES[cle], prefs[cle]);
+      el[cle].value = prefs[cle];
+      sauvegarder();
+      // On applique tout de suite si le minuteur n'a pas encore démarré sur ce mode
+      if (!intervalle && restant === total && cle === mode) changerMode(mode);
+    });
+  });
+  el.auto.addEventListener('change', () => { prefs.auto = el.auto.checked; sauvegarder(); });
+  el.son.addEventListener('change', () => { prefs.son = el.son.checked; sauvegarder(); });
+
+  // --- Événements ---
+  el.demarrer.addEventListener('click', () => { if (intervalle) pause(); else demarrer(); });
+  $('#btn-reinitialiser').addEventListener('click', () => changerMode(mode));
+  $('#btn-passer').addEventListener('click', () => {
+    const suivant = modeSuivant(false);
+    sauvegarder();
+    changerMode(suivant);
+    el.annonce.textContent = MODES[suivant].libelle;
+  });
+  document.querySelectorAll('.mode').forEach((b) => b.addEventListener('click', () => changerMode(b.dataset.mode)));
+  $('#btn-tester-son').addEventListener('click', () => { initAudio(); bip(true); });
+  $('#btn-raz-compteur').addEventListener('click', () => {
+    stats = { jour: aujourdhui(), cycles: 0, serie: 0 };
+    sauvegarder();
+    afficherStats();
+    el.annonce.textContent = 'Compteur remis à zéro.';
+  });
+
+  // --- Démarrage ---
+  el.anneau.style.strokeDasharray = String(CIRCONFERENCE);
+  remplirReglages();
+  changerMode('travail');
+})();
+</script>
+<script src="https://appmixtape.web.app/remix.js" data-app="PEc1Xi5I5FdqL1obObgDvFpci6z2/EWg7XdW3NRLh0xvmsFsb" defer></script>
+</body>
+</html>
